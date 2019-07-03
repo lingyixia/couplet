@@ -19,6 +19,7 @@ from tensorflow.contrib.seq2seq import dynamic_decode
 from tensorflow.contrib.seq2seq import sequence_loss
 from tensorflow.contrib.seq2seq import AttentionWrapper
 from tensorflow.contrib.seq2seq import GreedyEmbeddingHelper
+from tensorflow.contrib.seq2seq import BeamSearchDecoder
 
 
 class Seq2Seq(object):
@@ -93,6 +94,14 @@ class Seq2Seq(object):
 
     def __addDecodingLayer(self, mode):
         with tf.name_scope('decodingLayer'):
+            batch_size = tf.shape(self.__up_link)[0]
+            if self.__beam_search and mode == tf.estimator.ModeKeys.PREDICT:
+                self.__bid_output = tf.contrib.seq2seq.tile_batch(self.__bid_output, multiplier=self.__beam_size)
+                self.__decode_init_state = tf.contrib.seq2seq.tile_batch(self.__decode_init_state,
+                                                                         multiplier=self.__beam_size)
+                self.__encode_lengths = tf.contrib.seq2seq.tile_batch(self.__encode_lengths,
+                                                                      multiplier=self.__beam_size)
+                batch_size = batch_size * self.__beam_size
             attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(num_units=self.__hidden_size,
                                                                        memory=self.__bid_output,
                                                                        memory_sequence_length=self.__encode_lengths)
@@ -104,7 +113,6 @@ class Seq2Seq(object):
                                            activation=tf.nn.relu,
                                            kernel_initializer=tf.contrib.layers.xavier_initializer(),
                                            kernel_regularizer=keras.regularizers.l2(self.__l2_regularizer))
-            batch_size = tf.shape(self.__up_link)[0]
             initial_state = decoder_cell.zero_state(dtype=tf.float32, batch_size=batch_size)
             initial_state = initial_state.clone(cell_state=self.__decode_init_state)
             if mode in (tf.estimator.ModeKeys.TRAIN, tf.estimator.ModeKeys.EVAL):
@@ -119,7 +127,7 @@ class Seq2Seq(object):
                 max_length = tf.reduce_max(self.__decode_lengths)
                 decoder_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=training_decoder,
                                                                           maximum_iterations=max_length,
-                                                                          impute_finished=True)
+                                                                          impute_finished=True)  # 遇到EOS自动停止解码（EOS之后的所有time step的输出为0，输出状态为最后一个有效time step的输出状态）
                 decoder_logits_train = tf.identity(decoder_outputs.rnn_output)
                 weights = tf.sequence_mask(self.__decode_lengths, dtype=tf.float32)
                 down_link_output = tf.strided_slice(self.__down_link, begin=[0, 1], end=tf.shape(self.__down_link))
@@ -127,20 +135,11 @@ class Seq2Seq(object):
                                                              targets=down_link_output,
                                                              weights=weights)
                 self.logits = tf.where(tf.not_equal(decoder_logits_train, 0.0))
-                # self.logits = decoder_logits_train
                 # tf.summary.scalar('loss', self.loss)
                 # self.summary_op = tf.summary.merge_all()
             else:
-                start_tokens = tf.fill([batch_size], self.__start_token)
+                start_tokens = tf.fill([tf.shape(self.__up_link)[0]], self.__start_token)
                 if self.__beam_search:
-                    self.__bid_output = tf.contrib.seq2seq.tile_batch(self.__bid_output, multiplier=self.__beam_size)
-                    self.__decode_init_state = tf.contrib.seq2seq.tile_batch(self.__decode_init_state,
-                                                                             multiplier=self.__beam_size)
-                    self.__encode_lengths = tf.contrib.seq2seq.tile_batch(self.__encode_lengths,
-                                                                          multiplier=self.__beam_size)
-                    batch_size = batch_size * self.__beam_size
-                    initial_state = decoder_cell.zero_state(dtype=tf.float32, batch_size=batch_size)
-                    initial_state = initial_state.clone(cell_state=self.__decode_init_state)
                     inference_decoder = tf.contrib.seq2seq.BeamSearchDecoder(cell=decoder_cell,
                                                                              embedding=self.__embedding,
                                                                              start_tokens=start_tokens,
@@ -156,11 +155,13 @@ class Seq2Seq(object):
                                                                         helper=decoding_helper,
                                                                         initial_state=initial_state,
                                                                         output_layer=output_layer)
+
                 decoder_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=inference_decoder,
                                                                           maximum_iterations=self.__max_length)
                 if self.__beam_search:
                     self.decoder_predict_decode = {'up_link': self.__up_link,
-                                                   'down_link': decoder_outputs.predicted_ids}
+                                                   'down_link': tf.transpose(decoder_outputs.predicted_ids,
+                                                                             perm=[0, 2, 1])}
                 else:
                     self.decoder_predict_decode = {'up_link': self.__up_link, 'down_link': decoder_outputs.sample_id}
 

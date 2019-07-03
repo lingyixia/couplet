@@ -94,17 +94,21 @@ if __name__ == '__main__':
               'beamSize': FLAGS.beam_size
               }
     model = tf.estimator.Estimator(model_fn=model_fn, model_dir='model', config=cfg, params=params)
-    train_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'train', 'in.txt'),
-                                       os.path.join(FLAGS.dataPath, 'train', 'out.txt'),
-                                       epoch_num=50)
-    dev_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'dev', 'in.txt'),
-                                     os.path.join(FLAGS.dataPath, 'dev', 'out.txt'), is_shuffle_and_repeat=False)
-    train_spec = tf.estimator.TrainSpec(input_fn=train_inputFun)
-    eval_spec = tf.estimator.EvalSpec(input_fn=dev_inputFun, throttle_secs=120)
-    tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
+    # train_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'train', 'in.txt'),
+    #                                    os.path.join(FLAGS.dataPath, 'train', 'out.txt'),
+    #                                    epoch_num=50)
+    # dev_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'dev', 'in.txt'),
+    #                                  os.path.join(FLAGS.dataPath, 'dev', 'out.txt'), is_shuffle_and_repeat=False)
+    # train_spec = tf.estimator.TrainSpec(input_fn=train_inputFun)
+    # eval_spec = tf.estimator.EvalSpec(input_fn=dev_inputFun, throttle_secs=120)
+    # tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
     test_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'test', 'in.txt'),
                                       os.path.join(FLAGS.dataPath, 'test', 'out.txt'), is_shuffle_and_repeat=False)
     predictions = model.predict(test_inputFun)
     for result in predictions:
         print(dataHelper.dataTransform(result['up_link']))
-        print(dataHelper.dataTransform(result['down_link_predict']))
+        if FLAGS.beam_search:
+            for line in range(FLAGS.beam_size):
+                print(dataHelper.dataTransform(result['down_link'][line]))
+        else:
+            print(dataHelper.dataTransform(result['down_link']))
