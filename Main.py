@@ -34,6 +34,8 @@ parser.add_argument('--batch_size', type=int, default=16, help='batchSize')
 parser.add_argument('--num_epoch', type=int, default=50, help='epoches')
 parser.add_argument('--max_length', type=int, default=65, help='序列最大长度')
 parser.add_argument('--model_path', type=str, default='model', help='模型保存路径')
+parser.add_argument('--beam_search', type=bool, default=True, help='是否使用BeamSearch')
+parser.add_argument('--beam_size', type=bool, default=5, help='beam_size')
 
 
 def model_fn(features, labels, mode, params):
@@ -53,7 +55,9 @@ def model_fn(features, labels, mode, params):
                     base_learn_rate=params['baseLearnRate'],
                     max_length=params['maxLength'],
                     start_token=params['startToken'],
-                    end_token=params['endToken'])
+                    end_token=params['endToken'],
+                    beam_search=params['beamSearch'],
+                    beam_size=params['beamSize'])
     if mode == tf.estimator.ModeKeys.TRAIN:
         loss, train_op, logits = model.getResult(mode)
         train_logging_hook = tf.train.LoggingTensorHook({"up_link": logits}, every_n_iter=100)
@@ -85,7 +89,9 @@ if __name__ == '__main__':
               'maxLength': FLAGS.max_length,
               'startToken': dataHelper.vocab2index['<s>'],
               'endToken': dataHelper.vocab2index['</s>'],
-              'vocabs': len(dataHelper.vocab2index)
+              'vocabs': len(dataHelper.vocab2index),
+              'beamSearch': FLAGS.beam_search,
+              'beamSize': FLAGS.beam_size
               }
     model = tf.estimator.Estimator(model_fn=model_fn, model_dir='model', config=cfg, params=params)
     train_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'train', 'in.txt'),

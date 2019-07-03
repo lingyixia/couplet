@@ -12,6 +12,7 @@
 # -------------------------------------------------------------------------------
 import tensorflow as tf
 from tensorflow.contrib import keras
+from tensorflow.python.util import nest
 from tensorflow.contrib.seq2seq import BahdanauAttention
 from tensorflow.contrib.seq2seq import TrainingHelper
 from tensorflow.contrib.seq2seq import dynamic_decode
@@ -33,7 +34,9 @@ class Seq2Seq(object):
                  base_learn_rate,
                  max_length,
                  start_token,
-                 end_token):
+                 end_token,
+                 beam_search,
+                 beam_size):
         self.__encode_lengths = encode_lengths
         self.__up_link = up_link
         self.__decode_lengths = tf.subtract(decode_lengths, 1) if decode_lengths is not None else None
@@ -47,6 +50,8 @@ class Seq2Seq(object):
         self.__max_length = max_length
         self.__start_token = start_token
         self.__end_token = end_token
+        self.__beam_search = beam_search
+        self.__beam_size = beam_size
         self.__addEmbeddingLayer()
         self.__addEncodingLayer()
         self.__reduce_states()
@@ -54,10 +59,10 @@ class Seq2Seq(object):
     def __addEmbeddingLayer(self):
         with tf.name_scope("embeddingLayer"):
             with tf.variable_scope('reduceWeights', reuse=tf.AUTO_REUSE):
-                self.embedding = tf.get_variable(name='embedding', dtype=tf.float32,
-                                                 shape=[self.__vocab_size, self.__embedding_size],
-                                                 initializer=tf.contrib.layers.xavier_initializer())
-            embedding_up_link = tf.nn.embedding_lookup(self.embedding, self.__up_link)
+                self.__embedding = tf.get_variable(name='embedding', dtype=tf.float32,
+                                                   shape=[self.__vocab_size, self.__embedding_size],
+                                                   initializer=tf.contrib.layers.xavier_initializer())
+            embedding_up_link = tf.nn.embedding_lookup(self.__embedding, self.__up_link)
             self.__embedding_up_link = tf.nn.dropout(embedding_up_link, rate=1 - self.__dropout)
 
     def __addEncodingLayer(self):
@@ -99,11 +104,11 @@ class Seq2Seq(object):
                                            activation=tf.nn.relu,
                                            kernel_initializer=tf.contrib.layers.xavier_initializer(),
                                            kernel_regularizer=keras.regularizers.l2(self.__l2_regularizer))
-            initial_state = decoder_cell.zero_state(dtype=tf.float32,
-                                                    batch_size=tf.shape(self.__up_link)[0])
+            batch_size = tf.shape(self.__up_link)[0]
+            initial_state = decoder_cell.zero_state(dtype=tf.float32, batch_size=batch_size)
             initial_state = initial_state.clone(cell_state=self.__decode_init_state)
             if mode in (tf.estimator.ModeKeys.TRAIN, tf.estimator.ModeKeys.EVAL):
-                embedding_down_link_input = tf.nn.embedding_lookup(self.embedding, self.__down_link)
+                embedding_down_link_input = tf.nn.embedding_lookup(self.__embedding, self.__down_link)
                 training_helper = tf.contrib.seq2seq.TrainingHelper(inputs=embedding_down_link_input,
                                                                     sequence_length=self.__decode_lengths,
                                                                     name='training_helper')
@@ -126,17 +131,38 @@ class Seq2Seq(object):
                 # tf.summary.scalar('loss', self.loss)
                 # self.summary_op = tf.summary.merge_all()
             else:
-                start_tokens = tf.ones(shape=[tf.shape(self.__up_link)[0]], dtype=tf.int32) * self.__start_token
-                decoding_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(embedding=self.embedding,
-                                                                           start_tokens=start_tokens,
-                                                                           end_token=self.__end_token)
-                inference_decoder = tf.contrib.seq2seq.BasicDecoder(cell=decoder_cell,
-                                                                    helper=decoding_helper,
-                                                                    initial_state=initial_state,
-                                                                    output_layer=output_layer)
+                start_tokens = tf.fill([batch_size], self.__start_token)
+                if self.__beam_search:
+                    self.__bid_output = tf.contrib.seq2seq.tile_batch(self.__bid_output, multiplier=self.__beam_size)
+                    self.__decode_init_state = tf.contrib.seq2seq.tile_batch(self.__decode_init_state,
+                                                                             multiplier=self.__beam_size)
+                    self.__encode_lengths = tf.contrib.seq2seq.tile_batch(self.__encode_lengths,
+                                                                          multiplier=self.__beam_size)
+                    batch_size = batch_size * self.__beam_size
+                    initial_state = decoder_cell.zero_state(dtype=tf.float32, batch_size=batch_size)
+                    initial_state = initial_state.clone(cell_state=self.__decode_init_state)
+                    inference_decoder = tf.contrib.seq2seq.BeamSearchDecoder(cell=decoder_cell,
+                                                                             embedding=self.__embedding,
+                                                                             start_tokens=start_tokens,
+                                                                             end_token=self.__end_token,
+                                                                             initial_state=initial_state,
+                                                                             beam_width=self.__beam_size,
+                                                                             output_layer=output_layer)
+                else:
+                    decoding_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(embedding=self.__embedding,
+                                                                               start_tokens=start_tokens,
+                                                                               end_token=self.__end_token)
+                    inference_decoder = tf.contrib.seq2seq.BasicDecoder(cell=decoder_cell,
+                                                                        helper=decoding_helper,
+                                                                        initial_state=initial_state,
+                                                                        output_layer=output_layer)
                 decoder_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=inference_decoder,
                                                                           maximum_iterations=self.__max_length)
-                self.decoder_predict_decode = {'up_link': self.__up_link, 'down_link': decoder_outputs.sample_id}
+                if self.__beam_search:
+                    self.decoder_predict_decode = {'up_link': self.__up_link,
+                                                   'down_link': decoder_outputs.predicted_ids}
+                else:
+                    self.decoder_predict_decode = {'up_link': self.__up_link, 'down_link': decoder_outputs.sample_id}
 
     def getResult(self, mode):
         self.__addDecodingLayer(mode)
