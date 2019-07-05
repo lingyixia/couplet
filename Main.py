@@ -25,12 +25,12 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 # tf.enable_eager_execution()
 parser = argparse.ArgumentParser(description='Seq2Seq超参数设置')
 parser.add_argument('--dataPath', type=str, default='couplet', help='数据目录')
-parser.add_argument('--hidden_size', type=int, default=64, help='隐藏层维度')
+parser.add_argument('--hidden_size', type=int, default=128, help='隐藏层维度')
 parser.add_argument('--embedding_size', type=int, default=64, help='词向量维度')
 parser.add_argument('--dropout', type=float, default=0.5, help='dropout')
-parser.add_argument('--base_learnRate', type=float, default=0.1, help='初始学习率')
-parser.add_argument('--l2_regularizer', type=float, default=0.01, help='l2正则项系数')
-parser.add_argument('--batch_size', type=int, default=16, help='batchSize')
+parser.add_argument('--base_learnRate', type=float, default=0.005, help='初始学习率')
+parser.add_argument('--l2_regularizer', type=float, default=0.001, help='l2正则项系数')
+parser.add_argument('--batch_size', type=int, default=32, help='batchSize')
 parser.add_argument('--num_epoch', type=int, default=50, help='epoches')
 parser.add_argument('--max_length', type=int, default=65, help='序列最大长度')
 parser.add_argument('--model_path', type=str, default='model', help='模型保存路径')
@@ -94,14 +94,14 @@ if __name__ == '__main__':
               'beamSize': FLAGS.beam_size
               }
     model = tf.estimator.Estimator(model_fn=model_fn, model_dir='model', config=cfg, params=params)
-    # train_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'train', 'in.txt'),
-    #                                    os.path.join(FLAGS.dataPath, 'train', 'out.txt'),
-    #                                    epoch_num=50)
-    # dev_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'dev', 'in.txt'),
-    #                                  os.path.join(FLAGS.dataPath, 'dev', 'out.txt'), is_shuffle_and_repeat=False)
-    # train_spec = tf.estimator.TrainSpec(input_fn=train_inputFun)
-    # eval_spec = tf.estimator.EvalSpec(input_fn=dev_inputFun, throttle_secs=120)
-    # tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
+    train_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'train', 'in.txt'),
+                                       os.path.join(FLAGS.dataPath, 'train', 'out.txt'),
+                                       epoch_num=50)
+    dev_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'dev', 'in.txt'),
+                                     os.path.join(FLAGS.dataPath, 'dev', 'out.txt'), is_shuffle_and_repeat=False)
+    train_spec = tf.estimator.TrainSpec(input_fn=train_inputFun)
+    eval_spec = tf.estimator.EvalSpec(input_fn=dev_inputFun, throttle_secs=120)
+    tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
     test_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'test', 'in.txt'),
                                       os.path.join(FLAGS.dataPath, 'test', 'out.txt'), is_shuffle_and_repeat=False)
     predictions = model.predict(test_inputFun)

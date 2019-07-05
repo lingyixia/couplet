@@ -40,7 +40,7 @@ class Seq2Seq(object):
                  beam_size):
         self.__encode_lengths = encode_lengths
         self.__up_link = up_link
-        self.__decode_lengths = tf.subtract(decode_lengths, 1) if decode_lengths is not None else None
+        self.__decode_lengths = decode_lengths
         self.__down_link = down_link
         self.__vocab_size = vocab_size
         self.__hidden_size = hidden_size
@@ -173,10 +173,10 @@ class Seq2Seq(object):
                                                     100,
                                                     0.98,
                                                     staircase=True)
-            optimizer = tf.train.AdamOptimizer(learn_rate)
+            optimizer = tf.train.AdamOptimizer(0.001)
             gradients = optimizer.compute_gradients(self.loss)
-            capped_gradients = [(tf.clip_by_value(grad, -5., 5.), var) for grad, var in gradients if grad is not None]
-            self.train_op = optimizer.apply_gradients(capped_gradients, global_step=tf.train.get_global_step())
+            clipped_gradients = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gradients if grad is not None]
+            self.train_op = optimizer.apply_gradients(clipped_gradients, global_step=tf.train.get_global_step())
             return self.loss, self.train_op, self.logits
         if mode == tf.estimator.ModeKeys.EVAL:
             return self.loss

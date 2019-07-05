@@ -13,7 +13,7 @@
 import functools
 import tensorflow as tf
 from pathlib import Path
-
+tf.enable_eager_execution()
 
 class DataHelper(object):
     def __init__(self, vocab_file):
@@ -35,14 +35,14 @@ class DataHelper(object):
 
     def parse_fn(self, up_link_line, down_link_line):
         up_link = up_link_line.strip('\n').split()
-        up_link = ['<s>'] + up_link
-        up_link += ['</s>']
+        # up_link = ['<s>'] + up_link
+        # up_link += ['</s>']
         down_link = down_link_line.strip('\n').split()
         down_link = ['<s>'] + down_link
         down_link = down_link + ['</s>']
         up_link = list(map(lambda x: self.vocab2index[x], up_link))
         down_link = list(map(lambda x: self.vocab2index[x], down_link))
-        return (up_link, len(up_link)), (down_link, len(down_link))
+        return (up_link, len(up_link)), (down_link, len(down_link)-1)#下联长度减一是因为训练解码阶段输入去掉</s>,输出去掉<s>
 
     def generator_fn(self, up_link_file, down_link_file):
         with Path(up_link_file).open('r') as up_line_reader, Path(down_link_file).open('r') as down_line_reader:
@@ -72,3 +72,10 @@ class DataHelper(object):
             else:
                 result += self.index2vocab[i]
         return result
+
+
+if __name__ == '__main__':
+    dataHelper = DataHelper('couplet/vocabs')
+    dataset = dataHelper.input_fn('couplet/train/in.txt', 'couplet/train/out.txt',is_shuffle_and_repeat=False)
+    for d in dataset:
+        print(d)
