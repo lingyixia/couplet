@@ -37,7 +37,8 @@ class Seq2Seq(object):
                  start_token,
                  end_token,
                  beam_search,
-                 beam_size):
+                 beam_size,
+                 layer_size):
         self.__encode_lengths = encode_lengths
         self.__up_link = up_link
         self.__decode_lengths = decode_lengths
@@ -53,6 +54,7 @@ class Seq2Seq(object):
         self.__end_token = end_token
         self.__beam_search = beam_search
         self.__beam_size = beam_size
+        self.__layer_size = layer_size
         self.__addEmbeddingLayer()
         self.__addEncodingLayer()
         self.__reduce_states()
@@ -68,23 +70,37 @@ class Seq2Seq(object):
 
     def __addEncodingLayer(self):
         with tf.name_scope("encodingLayer"):
-            fw_cell = tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
-                                                    output_keep_prob=self.__dropout)
-            bw_cell = tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
-                                                    output_keep_prob=self.__dropout)
-            bid_output, (self.__fw_st, self.__bw_st) = tf.nn.bidirectional_dynamic_rnn(cell_fw=fw_cell,
-                                                                                       cell_bw=bw_cell,
-                                                                                       sequence_length=self.__encode_lengths,
-                                                                                       inputs=self.__embedding_up_link,
-                                                                                       dtype=tf.float32)
+            layer_size = self.__layer_size // 2
+            # fw_cell = tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
+            #                                         output_keep_prob=self.__dropout)
+            fw_cell = tf.nn.rnn_cell.MultiRNNCell(
+                [tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
+                                               output_keep_prob=self.__dropout) for _ in range(layer_size)])
+            # bw_cell = tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
+            #                                         output_keep_prob=self.__dropout)
+            bw_cell = tf.nn.rnn_cell.MultiRNNCell(
+                [tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
+                                               output_keep_prob=self.__dropout) for _ in range(layer_size)])
+            bid_output, (fw_st, bw_st) = tf.nn.bidirectional_dynamic_rnn(cell_fw=fw_cell,
+                                                                         cell_bw=bw_cell,
+                                                                         sequence_length=self.__encode_lengths,
+                                                                         inputs=self.__embedding_up_link,
+                                                                         dtype=tf.float32)
             self.__bid_output = tf.concat(bid_output, -1)
+            fw_c = tf.concat([_.c for _ in fw_st], axis=-1)
+            fw_h = tf.concat([_.h for _ in fw_st], axis=-1)
+            self.__fw_st = tf.nn.rnn_cell.LSTMStateTuple(fw_c, fw_h)
+            bw_c = tf.concat([_.c for _ in bw_st], axis=-1)
+            bw_h = tf.concat([_.h for _ in bw_st], axis=-1)
+            self.__bw_st = tf.nn.rnn_cell.LSTMStateTuple(bw_c, bw_h)
 
     def __reduce_states(self):
         with tf.name_scope("reduceStatesLayer"):
             old_c = tf.concat([self.__fw_st.c, self.__bw_st.c], axis=-1)
             old_h = tf.concat([self.__fw_st.h, self.__bw_st.h], axis=-1)
             with tf.variable_scope('reduceWeights', reuse=tf.AUTO_REUSE):
-                weights = tf.get_variable(name='reduceWeights', shape=[2 * self.__hidden_size, self.__hidden_size],
+                weights = tf.get_variable(name='reduceWeights',
+                                          shape=[self.__layer_size * self.__hidden_size, self.__hidden_size],
                                           initializer=tf.contrib.layers.xavier_initializer())
                 bias = tf.get_variable(name='reduceBias', shape=(self.__hidden_size,),
                                        initializer=tf.contrib.layers.xavier_initializer())
@@ -128,13 +144,15 @@ class Seq2Seq(object):
                 decoder_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=training_decoder,
                                                                           maximum_iterations=max_length,
                                                                           impute_finished=True)  # 遇到EOS自动停止解码（EOS之后的所有time step的输出为0，输出状态为最后一个有效time step的输出状态）
-                decoder_logits_train = tf.identity(decoder_outputs.rnn_output)
+                # decoder_logits_train = tf.identity(decoder_outputs.rnn_output)
                 weights = tf.sequence_mask(self.__decode_lengths, dtype=tf.float32)
                 down_link_output = tf.strided_slice(self.__down_link, begin=[0, 1], end=tf.shape(self.__down_link))
-                self.loss = tf.contrib.seq2seq.sequence_loss(logits=decoder_logits_train,
+                self.loss = tf.contrib.seq2seq.sequence_loss(logits=decoder_outputs.rnn_output,
                                                              targets=down_link_output,
                                                              weights=weights)
-                self.logits = tf.where(tf.not_equal(decoder_logits_train, 0.0))
+                # self.logits = tf.where(tf.not_equal(decoder_outputs.rnn_output, 0.0))
+                self.decode_input = self.__down_link
+                self.decode_output = down_link_output
                 # tf.summary.scalar('loss', self.loss)
                 # self.summary_op = tf.summary.merge_all()
             else:
@@ -155,7 +173,6 @@ class Seq2Seq(object):
                                                                         helper=decoding_helper,
                                                                         initial_state=initial_state,
                                                                         output_layer=output_layer)
-
                 decoder_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=inference_decoder,
                                                                           maximum_iterations=self.__max_length)
                 if self.__beam_search:
@@ -177,7 +194,7 @@ class Seq2Seq(object):
             gradients = optimizer.compute_gradients(self.loss)
             clipped_gradients = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gradients if grad is not None]
             self.train_op = optimizer.apply_gradients(clipped_gradients, global_step=tf.train.get_global_step())
-            return self.loss, self.train_op, self.logits
+            return self.loss, self.train_op, self.decode_input, self.decode_output
         if mode == tf.estimator.ModeKeys.EVAL:
             return self.loss
         else:
