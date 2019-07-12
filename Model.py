@@ -193,7 +193,7 @@ class Seq2Seq(object):
                                                     staircase=True)
             optimizer = tf.train.AdamOptimizer(learn_rate)
             gradients = optimizer.compute_gradients(self.loss)
-            clipped_gradients = [(tf.clip_by_value(grad, -0.5., 0.5), var) for grad, var in gradients if grad is not None]
+            clipped_gradients = [(tf.clip_by_value(grad, -0.5, 0.5), var) for grad, var in gradients if grad is not None]
             self.train_op = optimizer.apply_gradients(clipped_gradients, global_step=tf.train.get_global_step())
             return self.loss, self.train_op, self.decode_input, self.decode_output
         if mode == tf.estimator.ModeKeys.EVAL:

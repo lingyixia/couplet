@@ -63,7 +63,7 @@ def model_fn(features, labels, mode, params):
     if mode == tf.estimator.ModeKeys.TRAIN:
         loss, train_op, input, output = model.getResult(mode)
         train_logging_hook = tf.train.LoggingTensorHook({"input": input, 'output': output}, every_n_iter=100)
-        return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_op, training_hooks=[train_logging_hook])
+        return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
     elif mode == tf.estimator.ModeKeys.EVAL:
         loss = model.getResult(mode)
         return tf.estimator.EstimatorSpec(mode=mode, loss=loss)
