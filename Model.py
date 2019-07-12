@@ -22,7 +22,7 @@ from tensorflow.contrib.seq2seq import GreedyEmbeddingHelper
 from tensorflow.contrib.seq2seq import BeamSearchDecoder
 
 
-class Seq2Seq(object):
+class Couplet(object):
     def __init__(self, up_link,
                  encode_lengths,
                  down_link,
@@ -70,17 +70,17 @@ class Seq2Seq(object):
 
     def __addEncodingLayer(self):
         with tf.name_scope("encodingLayer"):
-            layer_size = self.__layer_size // 2
+            bi_layer_size = self.__layer_size // 2
             # fw_cell = tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
             #                                         output_keep_prob=self.__dropout)
             fw_cell = tf.nn.rnn_cell.MultiRNNCell(
                 [tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
-                                               output_keep_prob=self.__dropout) for _ in range(layer_size)])
+                                               output_keep_prob=self.__dropout) for _ in range(bi_layer_size)])
             # bw_cell = tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
             #                                         output_keep_prob=self.__dropout)
             bw_cell = tf.nn.rnn_cell.MultiRNNCell(
                 [tf.nn.rnn_cell.DropoutWrapper(cell=tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size),
-                                               output_keep_prob=self.__dropout) for _ in range(layer_size)])
+                                               output_keep_prob=self.__dropout) for _ in range(bi_layer_size)])
             bid_output, (fw_st, bw_st) = tf.nn.bidirectional_dynamic_rnn(cell_fw=fw_cell,
                                                                          cell_bw=bw_cell,
                                                                          sequence_length=self.__encode_lengths,

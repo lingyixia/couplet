@@ -13,7 +13,7 @@
 from pathlib import Path
 import tensorflow as tf
 import functools
-from Model import Seq2Seq
+from Model import Couplet
 from dataHelper import DataHelper
 import argparse, os, json
 import numpy as np
@@ -44,7 +44,7 @@ def model_fn(features, labels, mode, params):
     down_link, decode_lengths = None, None
     if mode in (tf.estimator.ModeKeys.TRAIN, tf.estimator.ModeKeys.EVAL):
         down_link, decode_lengths = labels
-    model = Seq2Seq(up_link,
+    model = Couplet(up_link,
                     encode_lengths,
                     down_link,
                     decode_lengths,
