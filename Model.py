@@ -124,7 +124,8 @@ class Seq2Seq(object):
             decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=self.__hidden_size, dtype=tf.float32)
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(cell=decoder_cell,
                                                                attention_mechanism=attention_mechanism,
-                                                               attention_layer_size=self.__hidden_size)
+                                                               attention_layer_size=self.__hidden_size,
+                                                               alignment_history=True)#记录每个attention值
             output_layer = tf.layers.Dense(units=self.__vocab_size,
                                            activation=tf.nn.relu,
                                            kernel_initializer=tf.contrib.layers.xavier_initializer(),
@@ -141,10 +142,10 @@ class Seq2Seq(object):
                                                                    initial_state=initial_state,
                                                                    output_layer=output_layer)  # 调用dynamic_decode进行解码，decoder_outputs是一个namedtuple，里面包含两项(rnn_outputs, sample_id)
                 max_length = tf.reduce_max(self.__decode_lengths)
-                decoder_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=training_decoder,
+                decoder_outputs, attention, _ = tf.contrib.seq2seq.dynamic_decode(decoder=training_decoder,
                                                                           maximum_iterations=max_length,
                                                                           impute_finished=True)  # 遇到EOS自动停止解码（EOS之后的所有time step的输出为0，输出状态为最后一个有效time step的输出状态）
-                # decoder_logits_train = tf.identity(decoder_outputs.rnn_output)
+                self.attention = tf.transpose(attention.alignment_history.stack(), perm=[1, 0, 2])#得到每个attention值
                 weights = tf.sequence_mask(self.__decode_lengths, dtype=tf.float32)
                 down_link_output = tf.strided_slice(self.__down_link, begin=[0, 1], end=tf.shape(self.__down_link))
                 self.loss = tf.contrib.seq2seq.sequence_loss(logits=decoder_outputs.rnn_output,
