@@ -28,7 +28,7 @@ parser.add_argument('--dataPath', type=str, default='couplet', help='数据目�
 parser.add_argument('--hidden_size', type=int, default=128, help='隐藏层维度')
 parser.add_argument('--embedding_size', type=int, default=64, help='词向量维度')
 parser.add_argument('--dropout', type=float, default=0.5, help='dropout')
-parser.add_argument('--base_learnRate', type=float, default=0.005, help='初始学习率')
+parser.add_argument('--base_learnRate', type=float, default=0.001, help='初始学习率')
 parser.add_argument('--l2_regularizer', type=float, default=0.001, help='l2正则项系数')
 parser.add_argument('--batch_size', type=int, default=32, help='batchSize')
 parser.add_argument('--num_epoch', type=int, default=50, help='epoches')
