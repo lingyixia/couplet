@@ -125,7 +125,7 @@ class Couplet(object):
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(cell=decoder_cell,
                                                                attention_mechanism=attention_mechanism,
                                                                attention_layer_size=self.__hidden_size,
-                                                               alignment_history=True)#记录每个attention值
+                                                               alignment_history=True)  # 记录每个attention值
             output_layer = tf.layers.Dense(units=self.__vocab_size,
                                            activation=tf.nn.relu,
                                            kernel_initializer=tf.contrib.layers.xavier_initializer(),
@@ -143,9 +143,9 @@ class Couplet(object):
                                                                    output_layer=output_layer)  # 调用dynamic_decode进行解码，decoder_outputs是一个namedtuple，里面包含两项(rnn_outputs, sample_id)
                 max_length = tf.reduce_max(self.__decode_lengths)
                 decoder_outputs, attention, _ = tf.contrib.seq2seq.dynamic_decode(decoder=training_decoder,
-                                                                          maximum_iterations=max_length,
-                                                                          impute_finished=True)  # 遇到EOS自动停止解码（EOS之后的所有time step的输出为0，输出状态为最后一个有效time step的输出状态）
-                self.attention = tf.transpose(attention.alignment_history.stack(), perm=[1, 0, 2])#得到每个attention值
+                                                                                  maximum_iterations=max_length,
+                                                                                  impute_finished=True)  # 遇到EOS自动停止解码（EOS之后的所有time step的输出为0，输出状态为最后一个有效time step的输出状态）
+                self.attention = tf.transpose(attention.alignment_history.stack(), perm=[1, 0, 2])  # 得到每个attention值
                 weights = tf.sequence_mask(self.__decode_lengths, dtype=tf.float32)
                 down_link_output = tf.strided_slice(self.__down_link, begin=[0, 1], end=tf.shape(self.__down_link))
                 self.loss = tf.contrib.seq2seq.sequence_loss(logits=decoder_outputs.rnn_output,
@@ -191,6 +191,13 @@ class Couplet(object):
                                                     100,
                                                     0.98,
                                                     staircase=True)
+            # params = tf.trainable_variables()
+            # gradients = tf.gradients(self.loss, params)
+            # clipped_gradients, _ = tf.clip_by_global_norm(
+            #     gradients, 0.5)
+            # self.train_op = tf.train.AdamOptimizer(
+            #     learning_rate=0.0001,
+            # ).apply_gradients(zip(clipped_gradients, params), global_step=tf.train.get_global_step())
             optimizer = tf.train.AdamOptimizer(learn_rate)
             gradients = optimizer.compute_gradients(self.loss)
             clipped_gradients = [(tf.clip_by_value(grad, -0.5, 0.5), var) for grad, var in gradients if grad is not None]
