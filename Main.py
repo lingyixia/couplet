@@ -25,18 +25,18 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 # tf.enable_eager_execution()
 parser = argparse.ArgumentParser(description='Seq2Seq超参数设置')
 parser.add_argument('--dataPath', type=str, default='couplet', help='数据目录')
-parser.add_argument('--hidden_size', type=int, default=128, help='隐藏层维度')
-parser.add_argument('--embedding_size', type=int, default=64, help='词向量维度')
+parser.add_argument('--hidden_size', type=int, default=512, help='隐藏层维度')
+parser.add_argument('--embedding_size', type=int, default=128, help='词向量维度')
 parser.add_argument('--dropout', type=float, default=0.5, help='dropout')
 parser.add_argument('--base_learnRate', type=float, default=0.001, help='初始学习率')
 parser.add_argument('--l2_regularizer', type=float, default=0.001, help='l2正则项系数')
 parser.add_argument('--batch_size', type=int, default=32, help='batchSize')
 parser.add_argument('--num_epoch', type=int, default=50, help='epoches')
-parser.add_argument('--max_length', type=int, default=65, help='序列最大长度')
+parser.add_argument('--max_length', type=int, default=100, help='序列最大长度')
 parser.add_argument('--model_path', type=str, default='model', help='模型保存路径')
 parser.add_argument('--beam_search', type=bool, default=True, help='是否使用BeamSearch')
 parser.add_argument('--beam_size', type=bool, default=5, help='beam_size')
-parser.add_argument('--encode_layer_size', type=bool, default=6, help='编码层bisltm层数')
+parser.add_argument('--encode_layer_size', type=int, default=6, help='编码层bisltm层数,需要偶数')
 
 
 def model_fn(features, labels, mode, params):
