@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>首页</title>
+</head>
+<body>
+<h1>小宇陪你对对联</h1>
+<form action="/send" method="post">
+    请输入上联:<input name="uplink">
+    <button type="submit">提交</button>
+</form>
+<br>
+<br/>
+{% if downlink%}
+<br>
+上联:{{ uplink }}
+<br/>
+下联:{{downlink[0]}}
+<h4>其他</h4>
+{% endif %}
+<ul>
+    {% for item in downlink %}
+    {% if loop.index != 1 %}
+    <li>{{ item }}</li>
+    {% endif %}
+    {% endfor %}
+</ul>
+</body>
+</html>
