@@ -102,7 +102,7 @@ if __name__ == '__main__':
                                        epoch_num=50)
     dev_inputFun = functools.partial(dataHelper.input_fn, os.path.join(FLAGS.dataPath, 'dev', 'in.txt'),
                                      os.path.join(FLAGS.dataPath, 'dev', 'out.txt'), is_shuffle_and_repeat=False)
-    #     train_spec = tf.estimator.TrainSpec(input_fn=train_inputFun)
+    train_spec = tf.estimator.TrainSpec(input_fn=train_inputFun)
     #     model.train(train_inputFun)
     eval_spec = tf.estimator.EvalSpec(input_fn=dev_inputFun, throttle_secs=120)
     #    tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
